@@ -5,6 +5,7 @@ export async function authenticateSession({
   serverUrl,
   username,
   password,
+  totpCode,
   parseCsrfToken,
 }) {
   const page = await fetchRequest(serverUrl + '/login', {
@@ -27,6 +28,10 @@ export async function authenticateSession({
   const form = new URLSearchParams();
   form.append('username', username);
   form.append('password', password);
+  // Optional TOTP code for accounts with two-factor authentication enabled.
+  if (totpCode && String(totpCode).trim()) {
+    form.append('totp', String(totpCode).trim());
+  }
   form.append('_csrf', csrfToken);
   const response = await fetchRequest(serverUrl + '/login', {
     method: 'POST',
@@ -37,6 +42,28 @@ export async function authenticateSession({
   const body = await response.text();
   if (body.toLowerCase().includes('bad credentials')) {
     return { ok: false, message: 'Incorrect username or password.' };
+  }
+  // The login page re-rendered after a redirect carries the 2FA state.
+  if (
+    body.toLowerCase().includes('two-factor authentication is enabled') ||
+    (response.url && response.url.toLowerCase().includes('totprequired'))
+  ) {
+    return {
+      ok: false,
+      totpRequired: true,
+      message:
+        'Two-factor authentication required: enter the 6-digit code from your authenticator app.',
+    };
+  }
+  if (
+    body.toLowerCase().includes('invalid two-factor authentication code') ||
+    (response.url && response.url.toLowerCase().includes('totperror'))
+  ) {
+    return {
+      ok: false,
+      totpError: true,
+      message: 'Invalid two-factor authentication code.',
+    };
   }
   if (!response.ok) {
     return {

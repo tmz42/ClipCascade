@@ -18,6 +18,7 @@ const SELECTORS = {
   advanceLink: "#advance-link",
   changeUsernameLink: "#change-username-link",
   changePasswordLink: "#change-password-link",
+  totpLink: "#totp-link",
   logoutLink: "#logout-link",
   logoutAllDevicesLink: "#logout-all-devices-link",
   maxMessageSize: "#max-message-size",
@@ -48,6 +49,20 @@ const SELECTORS = {
   editUserNewUsername: "#edit-user-new-username",
   editUserNewPassword: "#edit-user-new-password",
   editUserEnabled: "#edit-user-enabled",
+
+  // Modals: Two-Factor Authentication (TOTP)
+  totpModal: "#totp-modal",
+  totpStatusText: "#totp-status-text",
+  totpSetupArea: "#totp-setup-area",
+  totpSecretDisplay: "#totp-secret-display",
+  totpUriDisplay: "#totp-uri-display",
+  totpCopySecret: "#totp-copy-secret",
+  totpCopyUri: "#totp-copy-uri",
+  totpCodeInput: "#totp-code-input",
+  totpGenerateBtn: "#totp-generate-btn",
+  totpEnableBtn: "#totp-enable-btn",
+  totpDisableBtn: "#totp-disable-btn",
+  totpMessage: "#totp-message",
 };
 
 const ENDPOINTS = {
@@ -73,6 +88,10 @@ const ENDPOINTS = {
   serverMode: "/server-mode",
   stunUrl: "/stun-url",
   donationStatus: "/donation-status",
+  totpStatus: "/totp/status",
+  totpSetup: "/totp/setup",
+  totpEnable: "/totp/enable",
+  totpDisable: "/totp/disable",
 };
 
 // server mode
@@ -220,6 +239,16 @@ function initEventHandlers() {
   // Header links
   $(SELECTORS.changeUsernameLink).click(onChangeUsernameClick);
   $(SELECTORS.changePasswordLink).click(onChangePasswordClick);
+  $(SELECTORS.totpLink).click(openTotpModal);
+  $(SELECTORS.totpGenerateBtn).click(onTotpGenerateClick);
+  $(SELECTORS.totpEnableBtn).click(onTotpEnableClick);
+  $(SELECTORS.totpDisableBtn).click(onTotpDisableClick);
+  $(SELECTORS.totpCopySecret).click(() =>
+    copyToClipboard($(SELECTORS.totpSecretDisplay).val())
+  );
+  $(SELECTORS.totpCopyUri).click(() =>
+    copyToClipboard($(SELECTORS.totpUriDisplay).val())
+  );
   $(SELECTORS.logoutLink).click(onLogoutClick);
   $(SELECTORS.logoutAllDevicesLink).click(onLogoutAllDevicesClick);
 
@@ -487,6 +516,9 @@ function hideAddUserModal() {
 }
 function hideEditUserModal() {
   hideModal(SELECTORS.editUserModal);
+}
+function hideTotpModal() {
+  hideModal(SELECTORS.totpModal);
 }
 function validateUsername(username) {
   return (
@@ -1118,6 +1150,136 @@ function onChangePasswordClick() {
     error: (err) => {
       alert("Failed to update password");
       console.error(err);
+    },
+  });
+}
+
+/* -----------------------------------------
+   ==========  TOTP (2FA) HANDLERS  ==========
+   ----------------------------------------- */
+function showTotpMessage(text, isError) {
+  const box = $(SELECTORS.totpMessage);
+  box
+    .removeClass("alert-danger alert-success alert-info alert-warning")
+    .addClass(isError ? "alert-danger" : "alert-success")
+    .text(text)
+    .show();
+}
+
+function renderTotpStatus(status) {
+  if (!status.configured) {
+    $(SELECTORS.totpStatusText).text(
+      "Status: disabled on this server (CC_TOTP_ENABLED=false)"
+    );
+    $(SELECTORS.totpGenerateBtn).prop("disabled", true);
+    $(SELECTORS.totpEnableBtn).prop("disabled", true);
+    $(SELECTORS.totpDisableBtn).prop("disabled", true);
+  } else {
+    $(SELECTORS.totpStatusText).text(
+      "Status: " + (status.enabled ? "enabled" : "not enabled")
+    );
+    $(SELECTORS.totpGenerateBtn).prop("disabled", false);
+    $(SELECTORS.totpEnableBtn).prop("disabled", !status.pending);
+    $(SELECTORS.totpDisableBtn).prop("disabled", !status.enabled);
+  }
+}
+
+function openTotpModal() {
+  $(SELECTORS.totpMessage).hide();
+  $(SELECTORS.totpCodeInput).val("");
+  $(SELECTORS.totpSetupArea).hide();
+  showModal(SELECTORS.totpModal);
+  $.ajax({
+    url: ENDPOINTS.totpStatus,
+    method: "GET",
+    success: (data) => renderTotpStatus(data),
+    error: (err) => {
+      console.error("Failed to fetch TOTP status:", err);
+      showTotpMessage("Could not load two-factor authentication status.", true);
+    },
+  });
+}
+
+function onTotpGenerateClick() {
+  $(SELECTORS.totpMessage).hide();
+  $.ajax({
+    url: ENDPOINTS.totpSetup,
+    method: "POST",
+    success: (data) => {
+      $(SELECTORS.totpSecretDisplay).val(data.secret);
+      $(SELECTORS.totpUriDisplay).val(data.uri);
+      $(SELECTORS.totpSetupArea).show();
+      $(SELECTORS.totpEnableBtn).prop("disabled", false);
+      showTotpMessage(
+        "New secret generated. Add it to your authenticator app, then enter the 6-digit code and click \"Enable 2FA\".",
+        false
+      );
+    },
+    error: (err) => {
+      console.error("Failed to generate TOTP secret:", err);
+      showTotpMessage("Failed to generate a new secret.", true);
+    },
+  });
+}
+
+function onTotpEnableClick() {
+  const code = ($(SELECTORS.totpCodeInput).val() || "").trim();
+  if (!/^\d{6}$/.test(code)) {
+    showTotpMessage("Enter the 6-digit code from your authenticator app.", true);
+    return;
+  }
+  $.ajax({
+    url: ENDPOINTS.totpEnable,
+    method: "POST",
+    contentType: "application/json",
+    data: JSON.stringify({ code }),
+    success: (res) => {
+      $(SELECTORS.totpSetupArea).hide();
+      $(SELECTORS.totpCodeInput).val("");
+      showTotpMessage(res, false);
+      $.ajax({
+        url: ENDPOINTS.totpStatus,
+        method: "GET",
+        success: (data) => renderTotpStatus(data),
+      });
+    },
+    error: (err) => {
+      console.error("Failed to enable TOTP:", err);
+      showTotpMessage(
+        (err.responseText || "Failed to enable two-factor authentication."),
+        true
+      );
+    },
+  });
+}
+
+function onTotpDisableClick() {
+  const code = ($(SELECTORS.totpCodeInput).val() || "").trim();
+  if (!/^\d{6}$/.test(code)) {
+    showTotpMessage("Enter a valid 6-digit code to disable 2FA.", true);
+    return;
+  }
+  $.ajax({
+    url: ENDPOINTS.totpDisable,
+    method: "POST",
+    contentType: "application/json",
+    data: JSON.stringify({ code }),
+    success: (res) => {
+      $(SELECTORS.totpSetupArea).hide();
+      $(SELECTORS.totpCodeInput).val("");
+      showTotpMessage(res, false);
+      $.ajax({
+        url: ENDPOINTS.totpStatus,
+        method: "GET",
+        success: (data) => renderTotpStatus(data),
+      });
+    },
+    error: (err) => {
+      console.error("Failed to disable TOTP:", err);
+      showTotpMessage(
+        (err.responseText || "Failed to disable two-factor authentication."),
+        true
+      );
     },
   });
 }

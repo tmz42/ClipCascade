@@ -213,6 +213,8 @@ class Application:
             login_successful, msg_login, self.config.data["cookie"] = (
                 self.request_manager.login()
             )
+            # A TOTP code is valid for one time step only; never keep it around.
+            self.config.data["totp_code"] = ""
             if login_successful:
                 self.config.data["csrf_token"] = self.request_manager.get_csrf_token()
                 # Connecting installs clipboard listeners immediately. Prepare the

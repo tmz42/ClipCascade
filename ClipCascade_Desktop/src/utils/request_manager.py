@@ -47,20 +47,44 @@ class RequestManager:
                 return False, msg, None
             csrf_token = csrf_input["value"]
 
-            # Login with the credentials
+            # Login with the credentials (plus the optional TOTP code for 2FA)
             form_data = {
                 "username": self.config.data["username"],
                 "password": self.config.data["password"],
                 "_csrf": csrf_token,
             }
+            totp_code = (self.config.data.get("totp_code") or "").strip()
+            if totp_code:
+                form_data["totp"] = totp_code
             response = session.post(
                 self.config.data["server_url"] + LOGIN_URL,
                 data=form_data,
                 verify=self._verify(),
             )
+            # requests follows redirects, so a failed login finishes on the
+            # login page; its query string identifies the failure reason.
+            final_url = (response.url or "").lower()
+            body_lower = response.text.lower()
+            if (
+                "totprequired" in final_url
+                or "two-factor authentication is enabled" in body_lower
+            ):
+                msg = (
+                    "Two-factor authentication required: enter the 6-digit code "
+                    "from your authenticator app in the 2FA code field."
+                )
+                logging.error(msg)
+                return False, msg, None
+            if (
+                "totperror" in final_url
+                or "invalid two-factor authentication code" in body_lower
+            ):
+                msg = "Invalid two-factor authentication code."
+                logging.error(msg)
+                return False, msg, None
             if (
                 response.status_code == 200
-                and "bad credentials" not in response.text.lower()
+                and "bad credentials" not in body_lower
             ):
                 # login successful
                 cookie = session.cookies.get_dict()

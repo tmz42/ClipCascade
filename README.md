@@ -77,6 +77,7 @@
 
 - **🚀 Instant Clipboard Sync** – Clipboard content updates in real time across all connected devices. Just copy, and it’s there!  
 - **🔒 Secure Authentication** – Ensures only authorized users can sync clipboard data.  
+- **📱 Two-Factor Authentication (TOTP)** – Optional per-account 2FA with authenticator apps (Google Authenticator, Aegis, ...); all clients (web, desktop, Android) accept the 6-digit code at login.  
 - **🛡️ End-to-End Encryption** – Protects clipboard content with advanced cryptographic security and hashing techniques.  
 - **🔄 Dual Sync Modes:**  
   - **☁️ Server-Based Sync** – Reliable cloud-based synchronization via a centralized server.  

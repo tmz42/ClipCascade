@@ -125,6 +125,13 @@
           <!-- Don't change this error message -->
           Bad credentials
         </div>
+        <div th:if="${param.totpRequired}" class="alert alert-warning">
+          Two-factor authentication is enabled for this account. Enter the
+          6-digit code from your authenticator app.
+        </div>
+        <div th:if="${param.totpError}" class="alert alert-danger">
+          Invalid two-factor authentication code
+        </div>
         <div th:if="${param.logout}" class="alert alert-success">
           You have been signed out
         </div>
@@ -160,6 +167,20 @@
             class="form-control"
             placeholder="Password"
             required="required"
+          />
+        </p>
+        <p>
+          <label for="totp" class="sr-only">Two-factor code</label>
+          <input
+            type="text"
+            id="totp"
+            name="totp"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxlength="6"
+            class="form-control"
+            placeholder="6-digit 2FA code (if enabled)"
           />
         </p>
         <button class="btn btn-lg btn-primary btn-block" type="submit">

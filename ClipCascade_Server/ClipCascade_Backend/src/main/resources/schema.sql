@@ -24,3 +24,11 @@ CREATE TABLE IF NOT EXISTS user_info (
     last_name VARCHAR(255), -- User's last name
     notes TEXT -- Additional notes about the user
 );
+
+-- query to create the table totp_secrets if it doesn't exist (Java: TotpSecret.class)
+CREATE TABLE IF NOT EXISTS totp_secrets (
+    username VARCHAR(255) PRIMARY KEY, -- Username is primary key (unique and not null)
+    secret VARCHAR(255) NOT NULL, -- Base32-encoded TOTP secret
+    enabled BOOLEAN NOT NULL DEFAULT FALSE, -- Whether TOTP is enforced at login
+    created_at BIGINT -- Timestamp of when TOTP was enabled
+);
