@@ -700,13 +700,14 @@ export default function App() {
   };
 
   // Login
-  const login = async (data_s, password_s) => {
+  const login = async (data_s, password_s, totp_s = '') => {
     try {
       const authentication = await authenticateSession({
         fetchRequest: fetchTimeout,
         serverUrl: data_s.server_url,
         username: data_s.username,
         password: password_s,
+        totpCode: totp_s,
         parseCsrfToken: html => {
           const doc = new DOMParser().parseFromString(html, 'text/html');
           const inputs = doc.getElementsByTagName('input');
@@ -740,7 +741,12 @@ export default function App() {
 
         return [true, 'Login successful: ' + authentication.status, data_s];
       } else {
-        return [false, authentication.message, data_s];
+        return [
+          false,
+          authentication.message,
+          data_s,
+          Boolean(authentication.totpRequired || authentication.totpError),
+        ];
       }
     } catch (error) {
       if (error.name === 'AbortError') {
@@ -915,6 +921,9 @@ export default function App() {
 
   // password
   const [password, setPassword] = useState('');
+
+  // 2FA (TOTP) code (optional, never persisted)
+  const [totpCode, setTotpCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const passwordInputRef = useRef(null);
 
@@ -1090,8 +1099,13 @@ export default function App() {
       let loginResult;
       do {
         iteration++;
-        loginResult = await login(data_s, password_s);
-      } while (!loginResult[0] && iteration < MAX_LOGIN_AUTO_RETRY);
+        loginResult = await login(data_s, password_s, totpCode);
+        // TOTP failures need user input; do not auto-retry them.
+      } while (
+        !loginResult[0] &&
+        iteration < MAX_LOGIN_AUTO_RETRY &&
+        !loginResult[3]
+      );
 
       data_s = loginResult[2];
       if (!loginResult[0]) {
@@ -1099,6 +1113,7 @@ export default function App() {
         setLoginStatusMessage(['❌ ', loginResult[1]].join(''));
       } else {
         setLoginStatusMessage(['✅ ', loginResult[1]].join(''));
+        setTotpCode('');
 
         // Stop periodic checks work manager notification (if disabled)
         if (data_s.enable_periodic_checks === 'false') {
@@ -1364,6 +1379,24 @@ export default function App() {
                 handleInputChange('server_url', text.trim())
               }
               autoCapitalize="none"
+            />
+          </View>
+          <View style={styles.row}>
+            <InfoLabel
+              style={styles.label}
+              label="2FA code (optional):"
+              info={"Optional 6-digit two-factor authentication (TOTP) code.\n\nOnly required if 2FA is enabled for your account. Get the code from your authenticator app (Google Authenticator, Aegis, ...).\n\nYou can enable or disable 2FA from the server web page (Two-Factor Authentication menu)."}
+            />
+            <TextInput
+              editable={!isLoggingIn}
+              style={styles.input}
+              value={totpCode}
+              onChangeText={text => setTotpCode(text.trim())}
+              keyboardType="numeric"
+              maxLength={6}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="123456"
             />
           </View>
           <View style={styles.row}>

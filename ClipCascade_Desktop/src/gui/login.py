@@ -202,6 +202,22 @@ class LoginForm(GuiWindow):
             "Include protocol (http/https). Do not add /login or /clipsocket.",
         )
 
+        # 2FA (TOTP) code (optional)
+        totp_label = ttk.Label(self.field_frame, text="2FA code:")
+        totp_label.grid(row=3, column=0, padx=(0, 10), pady=5, sticky=tk.W)
+        self.totp_entry = ttk.Entry(self.field_frame, width=50, font=("Helvetica", 13))
+        self.totp_entry.insert(0, self.config.data.get("totp_code", ""))
+        self.totp_entry.grid(row=3, column=1, padx=10, pady=5, sticky=tk.W + tk.E)
+        self._add_tooltip(
+            [totp_label, self.totp_entry],
+            "Optional 6-digit two-factor authentication (TOTP) code.\n"
+            "\n"
+            "Only required if 2FA is enabled for your account.\n"
+            "Get the code from your authenticator app (Google Authenticator, Aegis, ...).\n"
+            "\n"
+            "You can enable or disable 2FA from the server web page (Two-Factor Authentication menu).",
+        )
+
         # Configure grid weights to ensure entries expand
         self.field_frame.columnconfigure(1, weight=1)
 
@@ -888,6 +904,7 @@ class LoginForm(GuiWindow):
         self.config.data["server_url"] = LoginForm.remove_trailing_slash(
             self.server_url_entry.get().strip()
         )
+        self.config.data["totp_code"] = self.totp_entry.get().strip()
         self.config.data["cipher_enabled"] = self.cipher_var.get()
         self.config.data["notification"] = self.notification_var.get()
         self.config.data["update_notifications"] = self.update_notifications_var.get()

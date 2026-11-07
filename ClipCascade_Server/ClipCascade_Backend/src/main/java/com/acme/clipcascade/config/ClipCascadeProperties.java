@@ -293,6 +293,21 @@ public class ClipCascadeProperties {
     @Value("${CC_CAPTCHA_DIFFICULTY_PERCENT:100}")
     private int captchaDifficultyPercent;
 
+    /*
+     * Master switch for TOTP two-factor authentication (default: true).
+     * When false, TOTP checks are skipped at login and the /totp/* management
+     * endpoints are disabled.
+     */
+    @Value("${CC_TOTP_ENABLED:true}")
+    private boolean totpEnabled;
+
+    /*
+     * Issuer label used in otpauth:// URIs shown during TOTP enrollment
+     * (default: ClipCascade)
+     */
+    @Value("${CC_TOTP_ISSUER:ClipCascade}")
+    private String totpIssuer;
+
     private long getMessageSizeInBytes() {
         /*
          * Note: Ensure that the same logic is applied in the activemq.xml file as well.
@@ -494,6 +509,18 @@ public class ClipCascadeProperties {
         return captchaDifficultyPercent;
     }
 
+    public boolean isTotpEnabled() {
+        return totpEnabled;
+    }
+
+    public boolean getTotpEnabled() {
+        return totpEnabled;
+    }
+
+    public String getTotpIssuer() {
+        return totpIssuer;
+    }
+
     @Override
     public String toString() {
         return "{\n" +
@@ -530,6 +557,8 @@ public class ClipCascadeProperties {
                 ",\n maxWsConnectionsPerUser='" + getMaxWsConnectionsPerUser() + "'" +
                 ",\n p2pSignalingRateLimitPerSec='" + getP2pSignalingRateLimitPerSec() + "'" +
                 ",\n captchaDifficultyPercent='" + getCaptchaDifficultyPercent() + "'" +
+                ",\n totpEnabled='" + isTotpEnabled() + "'" +
+                ",\n totpIssuer='" + getTotpIssuer() + "'" +
                 "\n}";
     }
 

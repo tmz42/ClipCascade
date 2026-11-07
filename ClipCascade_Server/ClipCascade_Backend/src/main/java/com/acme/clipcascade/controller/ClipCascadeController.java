@@ -33,6 +33,7 @@ import com.acme.clipcascade.service.CaptchaService;
 import com.acme.clipcascade.service.DonationService;
 import com.acme.clipcascade.service.FacadeUserService;
 import com.acme.clipcascade.service.SessionService;
+import com.acme.clipcascade.service.TotpService;
 import com.acme.clipcascade.service.UserInfoService;
 import com.acme.clipcascade.service.UserService;
 import com.acme.clipcascade.service.OnlineUsersService;
@@ -70,6 +71,7 @@ public class ClipCascadeController {
     private final WebSocketStatsService webSocketStatsService;
     private final OnlineUsersService onlineUsersService;
     private final DonationService donationService;
+    private final TotpService totpService;
 
     public ClipCascadeController(
             ClipCascadeProperties clipCascadeProperties,
@@ -82,7 +84,8 @@ public class ClipCascadeController {
             BruteForceProtectionService bruteForceProtectionService,
             WebSocketStatsService webSocketStatsService,
             OnlineUsersService onlineUsersService,
-            DonationService donationService) {
+            DonationService donationService,
+            TotpService totpService) {
 
         this.clipCascadeProperties = clipCascadeProperties;
         this.facadeUserService = facadeUserService;
@@ -95,6 +98,7 @@ public class ClipCascadeController {
         this.webSocketStatsService = webSocketStatsService;
         this.onlineUsersService = onlineUsersService;
         this.donationService = donationService;
+        this.totpService = totpService;
     }
 
     @PostConstruct
@@ -314,6 +318,52 @@ public class ClipCascadeController {
     @GetMapping("/validate-session")
     public ResponseEntity<?> validateSession() {
         return ResponseEntityUtil.executeWithResponse(() -> "OK");
+    }
+
+    @GetMapping("/totp/status")
+    public ResponseEntity<?> getTotpStatus(@AuthenticationPrincipal UserPrincipal userPrincipal) {
+        return ResponseEntityUtil.executeWithResponse(() -> {
+            Map<String, Object> response = new HashMap<>();
+            response.put("configured", totpService.isServerEnabled());
+            response.put("enabled", totpService.isEnabled(userPrincipal.getUsername()));
+            response.put("pending", totpService.hasPendingSecret(userPrincipal.getUsername()));
+            return response;
+        });
+    }
+
+    @PostMapping("/totp/setup")
+    public ResponseEntity<?> setupTotp(@AuthenticationPrincipal UserPrincipal userPrincipal) {
+        return ResponseEntityUtil.executeWithResponse(() -> {
+            Map<String, String> result = totpService.startSetup(userPrincipal.getUsername());
+            if (result == null) {
+                throw new IllegalStateException("Two-factor authentication is disabled on this server");
+            }
+            return result;
+        });
+    }
+
+    @PostMapping("/totp/enable")
+    @Transactional
+    public ResponseEntity<String> enableTotp(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @RequestBody Map<String, String> payload) {
+
+        return ResponseEntityUtil.buildResponse(
+                totpService.confirmSetup(userPrincipal.getUsername(), payload.get("code")),
+                "Two-factor authentication enabled successfully",
+                "Invalid or expired setup code");
+    }
+
+    @PostMapping("/totp/disable")
+    @Transactional
+    public ResponseEntity<String> disableTotp(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @RequestBody Map<String, String> payload) {
+
+        return ResponseEntityUtil.buildResponse(
+                totpService.disable(userPrincipal.getUsername(), payload.get("code")),
+                "Two-factor authentication disabled successfully",
+                "Invalid code or two-factor authentication is not enabled");
     }
 
     @GetMapping("/server-version")

@@ -6,7 +6,6 @@ import org.springframework.session.security.SpringSessionBackedSessionRegistry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationProvider;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -18,6 +17,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.session.HttpSessionEventPublisher;
 import com.acme.clipcascade.service.BruteForceProtectionService;
 import com.acme.clipcascade.service.FacadeUserService;
+import com.acme.clipcascade.service.TotpService;
 
 @Configuration
 @EnableWebSecurity
@@ -27,17 +27,20 @@ public class SecurityConfiguration {
 	private final BCryptPasswordEncoder bCryptPasswordEncoder;
 	private final BruteForceProtectionService bruteForceProtectionService;
 	private final FacadeUserService facadeUserService;
+	private final TotpService totpService;
 
 	SecurityConfiguration(
 			UserDetailsService userDetailsService,
 			BCryptPasswordEncoder bCryptPasswordEncoder,
 			BruteForceProtectionService bruteForceProtectionService,
-			FacadeUserService facadeUserService) {
+			FacadeUserService facadeUserService,
+			TotpService totpService) {
 
 		this.userDetailsService = userDetailsService;
 		this.bCryptPasswordEncoder = bCryptPasswordEncoder;
 		this.bruteForceProtectionService = bruteForceProtectionService;
 		this.facadeUserService = facadeUserService;
+		this.totpService = totpService;
 	}
 
 	// SessionRegistry bean to store session information
@@ -73,6 +76,8 @@ public class SecurityConfiguration {
 				.formLogin(form -> form
 						.loginPage("/login") // <- custom login URL
 						.failureUrl("/login?error") // <- Where to go if login fails
+						.failureHandler(new CustomAuthenticationFailureHandler()) // <- Maps TOTP failures to distinct login states
+						.authenticationDetailsSource(new TotpAuthenticationDetailsSource()) // <- Captures the optional "totp" form field
 						.successHandler(
 								new CustomAuthenticationSuccessHandler(
 										bruteForceProtectionService,
@@ -90,9 +95,9 @@ public class SecurityConfiguration {
 
 	@Bean
 	public AuthenticationProvider authenticationProvider() {
-		DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-		provider.setPasswordEncoder(bCryptPasswordEncoder);
-		provider.setUserDetailsService(userDetailsService);
-		return provider;
+		return new TotpAuthenticationProvider(
+				userDetailsService,
+				bCryptPasswordEncoder,
+				totpService);
 	}
 }

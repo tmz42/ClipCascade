@@ -61,6 +61,15 @@ class LoginForm:
             server_url.strip()
         )
 
+        # Optional TOTP code for accounts with 2FA enabled
+        totp_code = (
+            input(
+                f"2FA code (optional, 6 digits) [{self.config.data.get('totp_code', '')}]: "
+            )
+            or self.config.data.get("totp_code", "")
+        )
+        self.config.data["totp_code"] = totp_code.strip()
+
         self.config.data["cipher_enabled"] = LoginForm.str_to_bool(
             input(
                 f"Enable encryption (recommended) [{LoginForm.bool_to_str(self.config.data['cipher_enabled'])}]: "

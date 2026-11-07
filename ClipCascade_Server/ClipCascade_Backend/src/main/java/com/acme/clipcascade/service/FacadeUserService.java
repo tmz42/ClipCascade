@@ -27,15 +27,18 @@ public class FacadeUserService {
     private final UserService userService;
     private final UserInfoService userInfoService;
     private final ClipCascadeProperties clipCascadeProperties;
+    private final TotpService totpService;
 
     public FacadeUserService(
             UserService userService,
             UserInfoService userInfoService,
-            ClipCascadeProperties clipCascadeProperties) {
+            ClipCascadeProperties clipCascadeProperties,
+            TotpService totpService) {
 
         this.userService = userService;
         this.userInfoService = userInfoService;
         this.clipCascadeProperties = clipCascadeProperties;
+        this.totpService = totpService;
     }
 
     public void insertDefaultAdminUserIfEmpty() {
@@ -85,6 +88,8 @@ public class FacadeUserService {
 
         sessionService.logoutAllSessions(oldUsername);
 
+        totpService.rename(oldUsername, newUsername);
+
         UserInfo userInfo = userInfoService.markUserForDeletion(oldUsername);
         if (userInfo == null) {
             userInfoService.registerNewUser(newUsername);
@@ -106,6 +111,8 @@ public class FacadeUserService {
         sessionService.logoutAllSessions(username);
 
         userInfoService.markUserForDeletion(username);
+
+        totpService.clear(username);
 
         return userService.deleteUser(username);
     }

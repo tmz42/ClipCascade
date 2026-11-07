@@ -35,6 +35,7 @@ class Config:
             "hide_login_success_dialog": False,
             "save_password": False,
             "password": "",
+            "totp_code": "",
             "max_clipboard_size_local_limit_bytes": None,
             "send_clipboard": True,
             "receive_clipboard": True,
@@ -70,6 +71,9 @@ class Config:
         temporary_path = None
         try:
             temp = data.copy()
+            # A TOTP code is valid for at most one time step; never persist it.
+            if "totp_code" in temp:
+                temp["totp_code"] = ""
             if isinstance(temp.get("hashed_password"), bytes):
                 temp["hashed_password"] = base64.b64encode(
                     temp["hashed_password"]

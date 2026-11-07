@@ -32,8 +32,9 @@ OpenAPI contract. Probe the running server instead of assuming its mode or limit
    with official clients, also collect matching encryption settings: enabled
    (default `true`), PBKDF2 iterations (default `664937`), and extra salt (default
    empty string). The server does not supply these encryption settings.
-2. Obtain a pre-login CSRF token and cookie, submit the password digest, retain
-   the post-login cookies, and confirm identity with `/whoami`.
+2. Obtain a pre-login CSRF token and cookie, submit the password digest (plus
+   the optional `totp` code when the account has 2FA enabled), retain the
+   post-login cookies, and confirm identity with `/whoami`.
 3. Fetch `/csrf-token`, `/server-mode`, `/server-version`, and `/max-size`.
    In P2P mode, also fetch `/stun-url`.
 4. Establish the selected authenticated WebSocket transport. P2S uses STOMP;
@@ -75,8 +76,13 @@ Secure attributes; never decode or invent it.
 2. `POST /login` with form fields `username`, `password`, and `_csrf`, using the
    same cookies. The password must be the **lowercase hexadecimal SHA3-512 digest
    of the UTF-8 password**, matching the official clients. Do not use Keccak-512.
+   When the account has TOTP two-factor authentication enabled, also send the
+   current 6-digit code as an optional form field `totp`.
 3. Successful login redirects to `/`; failed login redirects to `/login?error`.
-   A redirect or an HTML response alone does not prove authentication succeeded.
+   For accounts with 2FA enabled, a correct password without a code redirects to
+   `/login?totpRequired`, and a wrong code redirects to `/login?totpError`;
+   resubmit with a valid `totp` value. A redirect or an HTML response alone does
+   not prove authentication succeeded.
 4. Verify the session with `GET /whoami`. Fetch `GET /csrf-token` after login to
    obtain the current token for subsequent mutations.
 
@@ -157,6 +163,34 @@ Password fields in signup, registration, and password updates use the same
 SHA3-512 digest convention. The server applies BCrypt to the submitted value for
 storage. Usernames must be nonblank and cannot start or end with spaces. Roles
 are uppercase `USER` and `ADMIN`; admin registration permits only `USER`.
+
+### Two-factor authentication (TOTP)
+
+Accounts can opt into RFC 6238 TOTP (HMAC-SHA1, 30-second step, 6 digits, Base32
+secret). The operator can disable the feature server-wide with
+`CC_TOTP_ENABLED=false`; the issuer label in enrollment URIs is
+`CC_TOTP_ISSUER` (default `ClipCascade`).
+
+Enrollment is performed while logged in, via the server web UI
+("Two-Factor Authentication" menu) or directly:
+
+1. `POST /totp/setup` (CSRF header required) returns
+   `{"secret":"<Base32 secret>","uri":"otpauth://totp/<issuer>:<user>?..."}`.
+   Add the secret to an authenticator app (manual key entry; the `otpauth` URL
+   is provided for apps that accept it). The secret stays pending until
+   confirmed.
+2. `POST /totp/enable` with JSON `{"code":"<6-digit code>"}` verifies the code
+   against the pending secret and activates 2FA. Returns plain text on `200`,
+   or `400 Invalid or expired setup code`.
+3. `GET /totp/status` returns `{"configured":bool,"enabled":bool,"pending":bool}`.
+4. `POST /totp/disable` with JSON `{"code":"<current 6-digit code>"}` disables
+   2FA and deletes the stored secret. Returns plain text on `200`, or `400`.
+
+From then on, `POST /login` requires the `totp` field in addition to the
+password; a failed or missing code counts as a failed login for the
+brute-force tracker. Secrets are stored per username in the `totp_secrets`
+table and are removed when the account is deleted or renamed. The server
+accepts codes from the previous, current, and next 30-second step.
 
 ### Credential and session lifecycle
 
@@ -246,7 +280,7 @@ These routes do not require authentication. Public mutations still require CSRF.
 | GET | `/health` | Plain text `OK`. |
 | GET | `/ping` | Plain text `pong`. |
 | GET | `/login` | Login HTML with a CSRF form token. |
-| POST | `/login` | Form fields `username`, `password`, `_csrf`; redirects as described above. |
+| POST | `/login` | Form fields `username`, `password`, `_csrf`, and optional `totp` (6-digit code when 2FA is enabled); redirects as described above. |
 | GET | `/signup` | Signup HTML if enabled; otherwise redirects to `/`. |
 | POST | `/signup` | Form fields `username`, `password`, `captchaInput`, `_csrf`. Returns `User registered successfully` or `400` (for example, `Captcha validation failed` or `Signup is disabled`). Does not log the user in. |
 | GET | `/captcha` | PNG captcha when signup is enabled; keep its session cookies for signup. Returns an empty body when signup is disabled. |
@@ -276,6 +310,10 @@ All routes here require a logged-in user, including the configuration endpoints.
 | GET | `/latest-server-version` | JSON fetched from the project's version URL; fields follow that upstream document. Can return `400` if fetching/parsing fails. |
 | PUT | `/update-password` | JSON `{"newPassword":"<SHA3-512 digest>"}`. Updates the current user's password and expires their sessions. |
 | DELETE | `/logout-session` | No body. Logs the current user out of all active sessions; returns a plain-text status. |
+| GET | `/totp/status` | `{"configured":bool,"enabled":bool,"pending":bool}` for the current user. |
+| POST | `/totp/setup` | Returns `{"secret":"<Base32>","uri":"otpauth://..."}`; starts enrollment. CSRF header required. |
+| POST | `/totp/enable` | JSON `{"code":"123456"}`. Confirms the pending secret and enables 2FA. |
+| POST | `/totp/disable` | JSON `{"code":"123456"}`. Requires a valid current code; disables 2FA. |
 
 ## Admin HTTP endpoints
 
@@ -1053,6 +1091,8 @@ Client-relevant server settings (defaults from this tree):
 | `CC_BROKER_HOST` / `CC_BROKER_PORT` | `localhost` / `61613` | Backend broker connection; clients still use `/clipsocket` |
 | `CC_BROKER_USERNAME` / `CC_BROKER_PASSWORD` | `admin` / `admin` | Server-to-broker credentials, not client HTTP credentials |
 | `CC_DONATIONS_ENABLED` | `false` | Donation link behavior |
+| `CC_TOTP_ENABLED` | `true` | Master switch for TOTP 2FA; when `false`, login skips the code and `/totp/*` is disabled |
+| `CC_TOTP_ISSUER` | `ClipCascade` | Issuer label in `otpauth://` enrollment URIs |
 
 Database, logging, and BFA cache settings are operator settings documented in the
 [server configuration guide](../README.md#-server-configuration) and

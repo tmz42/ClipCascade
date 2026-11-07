@@ -25,4 +25,8 @@ public class UserValidator {
     public static boolean isValidRole(String role) {
         return role != null && (role.equals(RoleConstants.ADMIN) || role.equals(RoleConstants.USER));
     }
+
+    public static boolean isValidTotpCode(String code) {
+        return code != null && code.matches("\\d{6}");
+    }
 }
